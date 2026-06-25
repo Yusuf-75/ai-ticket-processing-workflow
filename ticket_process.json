@@ -1,0 +1,860 @@
+{
+  "nodes": [
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "=Du bist ein hochpräziser AI-Klassifizierungs-Agent für ein Energie- und Versorgungsunternehmen. \nDeine einzige Aufgabe ist es, eingehende Kundenanfragen zu analysieren, zu kategorisieren und relevante Daten zu extrahieren.\n\nREGELN:\n1. Du antwortest AUSSCHLIESSLICH mit einem validen JSON-Objekt. Keine Begrüßung, keine Erklärungen.\n2. Wähle die \"kategorie\" exakt aus dieser Liste: [\"Zählerstand\", \"Störung\", \"Rechnungsfrage\", \"Stammdaten\", \"Sonstiges\"].\n3. Wähle die \"prioritaet\" exakt aus dieser Liste: [\"Niedrig\", \"Mittel\", \"Hoch\"]. (Störungen sind immer Hoch).\n\nERWARTETES JSON-SCHEMA:\n{\n  \"kategorie\": \"string\",\n  \"prioritaet\": \"string\",\n  \"extrahierte_daten\": {\n    // Extrahiere hier alle gefundenen Fakten als Key-Value, z.B. \"kundennummer\", \"zählerstand\", \"neue_iban\", \"adresse\"\n  },\n  \"vorgeschlagene_aktion\": \"string\", // Kurze Beschreibung, was der Sachbearbeiter tun sollte\n  \"begruendung\": \"string\" // 1 Satz, warum du so entschieden hast\n}",
+        "messages": {
+          "messageValues": [
+            {
+              "type": "HumanMessagePromptTemplate",
+              "message": "=Bitte klassifiziere folgendes Ticket: Nachricht: {{ $json.body.body }}"
+            }
+          ]
+        },
+        "batching": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.chainLlm",
+      "typeVersion": 1.9,
+      "position": [
+        624,
+        -16
+      ],
+      "id": "80d36db8-4951-4ba3-bc22-35251daa20b2",
+      "name": "Basic LLM Chain"
+    },
+    {
+      "parameters": {
+        "model": "llama-3.3-70b-versatile",
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatGroq",
+      "typeVersion": 1,
+      "position": [
+        624,
+        80
+      ],
+      "id": "facd9262-50c4-4b0c-aab5-dffcaeff6e42",
+      "name": "Groq Chat Model",
+      "credentials": {
+        "groqApi": {
+          "id": "DEINE_GROQ_API",
+          "name": "Groq account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "let kiText = $input.item.json.text;\nlet saubererText = kiText.replace(/```json/g, \"\").replace(/```/g, \"\").trim();\n\ntry {\n  // Wir VERSUCHEN, den Text in JSON zu verwandeln\n  let echtesJson = JSON.parse(saubererText);\n  \n  // Wenn es klappt, fügen wir einen unsichtbaren Stempel \"is_error: false\" hinzu\n  echtesJson.is_error = false;\n  return { json: echtesJson };\n\n} catch (error) {\n  // FÄLLT DAS SYSTEM AUF DIE NASE, fangen wir den Absturz hier ab!\n  // Wir bauen ein künstliches Notfall-JSON für die Datenbank\n  return {\n    json: {\n      \"kategorie\": \"KI_FEHLER\",\n      \"prioritaet\": \"Hoch\",\n      \"extrahierte_daten\": { \"raw_text\": kiText },\n      \"vorgeschlagene_aktion\": \"Manuelle Überprüfung erforderlich! KI hat ungültiges Format geliefert.\",\n      \"begruendung\": error.message,\n      \"is_error\": true // Dieser Stempel löst gleich den Alarm aus\n    }\n  };\n}"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        976,
+        -16
+      ],
+      "id": "a1b9f7b4-0633-4d79-829a-00b2ced2efbb",
+      "name": "Code in JavaScript1"
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "schema": {
+          "__rl": true,
+          "mode": "list",
+          "value": "public"
+        },
+        "table": {
+          "__rl": true,
+          "value": "mvp_tickets",
+          "mode": "list",
+          "cachedResultName": "mvp_tickets"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "ticket_id": "={{ $('Webhook').item.json.body.ticket_id }}",
+            "status": "={{ $json.data.approved ? 'approved' : 'rejected' }}",
+            "approved_by": "={{ 'Dispatcher-Team' }}",
+            "approved_at": "={{ $now }}"
+          },
+          "matchingColumns": [
+            "ticket_id"
+          ],
+          "schema": [
+            {
+              "id": "id",
+              "displayName": "id",
+              "required": false,
+              "defaultMatch": true,
+              "display": true,
+              "type": "number",
+              "canBeUsedToMatch": true,
+              "removed": true
+            },
+            {
+              "id": "ticket_id",
+              "displayName": "ticket_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "kunden_email",
+              "displayName": "kunden_email",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": true
+            },
+            {
+              "id": "original_anfrage",
+              "displayName": "original_anfrage",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": true
+            },
+            {
+              "id": "kategorie",
+              "displayName": "kategorie",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": true
+            },
+            {
+              "id": "prioritaet",
+              "displayName": "prioritaet",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": true
+            },
+            {
+              "id": "extrahierte_daten",
+              "displayName": "extrahierte_daten",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "object",
+              "canBeUsedToMatch": true,
+              "removed": true
+            },
+            {
+              "id": "ki_aktion",
+              "displayName": "ki_aktion",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": true
+            },
+            {
+              "id": "ki_begruendung",
+              "displayName": "ki_begruendung",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": true
+            },
+            {
+              "id": "status",
+              "displayName": "status",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "approved_by",
+              "displayName": "approved_by",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "approved_at",
+              "displayName": "approved_at",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "dateTime",
+              "canBeUsedToMatch": true,
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        1824,
+        -80
+      ],
+      "id": "22390899-5def-4159-8b9b-f3b28c77418a",
+      "name": "Update rows in a table",
+      "credentials": {
+        "postgres": {
+          "id": "DEINE_POSTGRES_ID",
+          "name": "Postgres account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "ddc87958-0709-46c8-a27c-27fd5a0652d4",
+              "leftValue": "={{ $json.is_error }}",
+              "rightValue": false,
+              "operator": {
+                "type": "boolean",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        1168,
+        -16
+      ],
+      "id": "5691459b-60d7-4a27-a1c8-db339370c88d",
+      "name": "If"
+    },
+    {
+      "parameters": {
+        "chatId": "=DEINE_TELEGRAM_CHAT_ID",
+        "text": "=<b>🚨 KRITISCHER KI-FEHLER 🚨</b>\nDas LLM hat bei der Ticket-Verarbeitung ungültige Daten geliefert!\n\n<b>Rohtext der KI:</b>\n<i>{{ $json.extrahierte_daten.raw_text }}</i>\n\n<b>System-Fehlermeldung:</b>\n{{ $json.begruendung }}\n\nBitte das n8n-Dashboard prüfen!",
+        "additionalFields": {
+          "parse_mode": "HTML"
+        }
+      },
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        1408,
+        128
+      ],
+      "id": "46a66b9c-0ca2-48ce-b549-2b79c6e9dbf0",
+      "name": "Send a text message1",
+      "webhookId": "DEINE_WEBHOOK_ID",
+      "credentials": {
+        "telegramApi": {
+          "id": "DEINE_TELEGRAM_API",
+          "name": "Telegram account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "schema": {
+          "__rl": true,
+          "mode": "list",
+          "value": "public"
+        },
+        "table": {
+          "__rl": true,
+          "value": "=mvp_tickets",
+          "mode": "name"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "ticket_id": "={{ $('Webhook').item.json.body.ticket_id }}",
+            "kunden_email": "={{ $('Webhook').item.json.body.customer_email }}",
+            "original_anfrage": "={{ $('Webhook').item.json.body.body }}",
+            "kategorie": "={{ $('Code in JavaScript1').item.json.kategorie }}",
+            "extrahierte_daten": "={{ JSON.stringify($json.extrahierte_daten) }}",
+            "prioritaet": "={{ $('Code in JavaScript1').item.json.prioritaet }}",
+            "ki_begruendung": "={{ $('Code in JavaScript1').item.json.begruendung }}",
+            "ki_aktion": "={{ $('Code in JavaScript1').item.json.vorgeschlagene_aktion }}"
+          },
+          "matchingColumns": [
+            "id"
+          ],
+          "schema": [
+            {
+              "id": "id",
+              "displayName": "id",
+              "required": false,
+              "defaultMatch": true,
+              "display": true,
+              "type": "number",
+              "canBeUsedToMatch": true,
+              "removed": true
+            },
+            {
+              "id": "ticket_id",
+              "displayName": "ticket_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "kunden_email",
+              "displayName": "kunden_email",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "original_anfrage",
+              "displayName": "original_anfrage",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "kategorie",
+              "displayName": "kategorie",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "prioritaet",
+              "displayName": "prioritaet",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "extrahierte_daten",
+              "displayName": "extrahierte_daten",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "object",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "ki_aktion",
+              "displayName": "ki_aktion",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "ki_begruendung",
+              "displayName": "ki_begruendung",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "status",
+              "displayName": "status",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        1408,
+        -80
+      ],
+      "id": "212bae47-813f-48b9-b890-66d126a72fab",
+      "name": "Insert rows in a table",
+      "credentials": {
+        "postgres": {
+          "id": "DEINE_POSTGRES_ID",
+          "name": "Postgres account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "ticket-inbox",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        -16,
+        0
+      ],
+      "id": "3fd21874-3d5b-43db-ab41-29697b778754",
+      "name": "Webhook",
+      "webhookId": "DEINE_WEBHOOK_ID"
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 3
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $('Send a text message6').item.json.data.approved }}",
+                    "rightValue": "reject",
+                    "operator": {
+                      "type": "boolean",
+                      "operation": "false",
+                      "singleValue": true
+                    },
+                    "id": "f54dc614-763d-4a29-a3b8-03a58bce51fb"
+                  }
+                ],
+                "combinator": "and"
+              }
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 3
+                },
+                "conditions": [
+                  {
+                    "id": "7e78bd28-04a8-439d-a94f-60d5d2fd3f35",
+                    "leftValue": "={{ $('Send a text message6').item.json.data.approved == true && $('Code in JavaScript1').item.json.kategorie == 'Störung' }}",
+                    "rightValue": "approve",
+                    "operator": {
+                      "type": "boolean",
+                      "operation": "true",
+                      "singleValue": true
+                    }
+                  }
+                ],
+                "combinator": "and"
+              }
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 3
+                },
+                "conditions": [
+                  {
+                    "id": "1d749f52-bdd3-4c79-b437-e57cfa2768e3",
+                    "leftValue": "={{ $('Send a text message6').item.json.data.approved == true && $('Code in JavaScript1').item.json.kategorie == 'Zählerstand' }}",
+                    "rightValue": "",
+                    "operator": {
+                      "type": "boolean",
+                      "operation": "true",
+                      "singleValue": true
+                    }
+                  }
+                ],
+                "combinator": "and"
+              }
+            }
+          ]
+        },
+        "options": {
+          "fallbackOutput": "extra"
+        }
+      },
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.4,
+      "position": [
+        2000,
+        -112
+      ],
+      "id": "61503002-3e82-4055-9e73-8102d4ce0296",
+      "name": "Switch"
+    },
+    {
+      "parameters": {
+        "chatId": "DEINE_TELEGRAM_CHAT_ID",
+        "text": "=[Salesforce] Ticket {{ $('Code in JavaScript2').item.json.ticket_id }} wurde abgelehnt. Der Fall wurde zur manuellen Prüfung in den Posteingang des Sachbearbeiters verschoben.",
+        "additionalFields": {}
+      },
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        2208,
+        -176
+      ],
+      "id": "22b069d4-6da0-4785-9646-6d25d0f5469d",
+      "name": "Send a text message2",
+      "webhookId": "DEINE_WEBHOOK_ID",
+      "credentials": {
+        "telegramApi": {
+          "id": "DEINE_TELEGRAM_API",
+          "name": "Telegram account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "chatId": "DEINE_TELEGRAM_CHAT_ID",
+        "text": "[Jira] Kritische Störung bestätigt! Ticket für Techniker-Team wurde im System angelegt. Kunde wird per SMS über Anfahrt informiert.",
+        "additionalFields": {}
+      },
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        2208,
+        -48
+      ],
+      "id": "00293398-be7d-4f8c-a168-067036ee69ae",
+      "name": "Send a text message3",
+      "webhookId": "DEINE_WEBHOOK_ID",
+      "credentials": {
+        "telegramApi": {
+          "id": "DEINE_TELEGRAM_API",
+          "name": "Telegram account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "chatId": "DEINE_TELEGRAM_CHAT_ID",
+        "text": "[SAP ERP] Freigabe erteilt. Zählerstand wurde erfolgreich in die Stammdatenbank überschrieben und das Ticket geschlossen.",
+        "additionalFields": {}
+      },
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        2208,
+        96
+      ],
+      "id": "cdcd178a-3d97-4565-85c0-e9ee4e6b2970",
+      "name": "Send a text message4",
+      "webhookId": "DEINE_WEBHOOK_ID",
+      "credentials": {
+        "telegramApi": {
+          "id": "DEINE_TELEGRAM_API",
+          "name": "Telegram account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "chatId": "DEINE_TELEGRAM_CHAT_ID",
+        "text": "=<b> [Clearing-Pool] Unbekanntes Routing</b> Ticket {{ $('Code in JavaScript2').item.json.ticket_id }} wurde von dir freigegeben, aber die Kategorie <b>'{{ $json.kategorie }}'</b> hat keinen automatischen Folgeprozess.  Das Ticket wurde zur manuellen Zuweisung in den Dispatcher-Posteingang verschoben.",
+        "additionalFields": {}
+      },
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        2208,
+        224
+      ],
+      "id": "b7056220-105c-4afd-9132-a9d11d8104c9",
+      "name": "Send a text message5",
+      "webhookId": "DEINE_WEBHOOK_ID",
+      "credentials": {
+        "telegramApi": {
+          "id": "DEINE_TELEGRAM_API",
+          "name": "Telegram account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "sendAndWait",
+        "chatId": "DEINE_TELEGRAM_CHAT_ID",
+        "message": "=<b>🚨 Neues Ticket zur Freigabe</b>\n<b>Ticket ID:</b> {{ $json.ticket_id }}\n<b>Kunde:</b> {{ $json.kunden_email }}\n\n<b>🧠 KI-Analyse:</b>\n<b>Kategorie:</b> {{ $json.kategorie }}\n<b>Priorität:</b> {{ $json.prioritaet }}\n\n<b>💡 Vorgeschlagene Aktion:</b>\n{{ $json.ki_aktion }}\n\n<b>Begründung:</b>\n<i>{{ $json.ki_begruendung }}</i>",
+        "approvalOptions": {
+          "values": {
+            "approvalType": "double"
+          }
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        1632,
+        -80
+      ],
+      "id": "68cb124c-e081-4d7b-ab8c-e3d8a622770c",
+      "name": "Send a text message6",
+      "webhookId": "DEINE_WEBHOOK_ID",
+      "credentials": {
+        "telegramApi": {
+          "id": "DEINE_TELEGRAM_API",
+          "name": "Telegram account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT COUNT(*) as anzahl \nFROM mvp_tickets \nWHERE ticket_id = '{{ $json.body.ticket_id }}';",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        240,
+        0
+      ],
+      "id": "c52460c8-0160-48c8-b886-d878a00a77f2",
+      "name": "Execute a SQL query",
+      "credentials": {
+        "postgres": {
+          "id": "DEINE_POSTGRES_ID",
+          "name": "Postgres account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "471acdbf-4852-42f9-a812-eb9ccc243eb1",
+              "leftValue": "={{ $json.anzahl }}",
+              "rightValue": "=0",
+              "operator": {
+                "type": "string",
+                "operation": "equals",
+                "name": "filter.operator.equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        384,
+        0
+      ],
+      "id": "34a58a60-7a3f-4a83-97b6-087733d69237",
+      "name": "If1"
+    }
+  ],
+  "connections": {
+    "Basic LLM Chain": {
+      "main": [
+        [
+          {
+            "node": "Code in JavaScript1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Groq Chat Model": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "Basic LLM Chain",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code in JavaScript1": {
+      "main": [
+        [
+          {
+            "node": "If",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Update rows in a table": {
+      "main": [
+        [
+          {
+            "node": "Switch",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "If": {
+      "main": [
+        [
+          {
+            "node": "Insert rows in a table",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Send a text message1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Insert rows in a table": {
+      "main": [
+        [
+          {
+            "node": "Send a text message6",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "Execute a SQL query",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Switch": {
+      "main": [
+        [
+          {
+            "node": "Send a text message2",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Send a text message3",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Send a text message4",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Send a text message5",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send a text message3": {
+      "main": [
+        []
+      ]
+    },
+    "Send a text message6": {
+      "main": [
+        [
+          {
+            "node": "Update rows in a table",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Execute a SQL query": {
+      "main": [
+        [
+          {
+            "node": "If1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "If1": {
+      "main": [
+        [
+          {
+            "node": "Basic LLM Chain",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "pinData": {},
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "PORTFOLIO_INSTANCE"
+  }
+}
